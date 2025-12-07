@@ -15,14 +15,14 @@ export const COLORS = {
   end: '#ef4444',
 };
 
-// Initial nodes positioned higher and centered
+// Initial nodes positioned left-aligned and vertically centered for mobile view (~300-400px height)
 export const INITIAL_NODES: Node[] = [
-  { id: '1', x: 250, y: 250, label: 'v1' },
-  { id: '2', x: 450, y: 150, label: 'v2' },
-  { id: '3', x: 450, y: 350, label: 'v3' },
-  { id: '4', x: 650, y: 150, label: 'v4' },
-  { id: '5', x: 650, y: 350, label: 'v5' },
-  { id: '6', x: 850, y: 250, label: 'v6' },
+  { id: '1', x: 100, y: 175, label: 'v1' },
+  { id: '2', x: 300, y: 75, label: 'v2' },
+  { id: '3', x: 300, y: 275, label: 'v3' },
+  { id: '4', x: 500, y: 75, label: 'v4' },
+  { id: '5', x: 500, y: 275, label: 'v5' },
+  { id: '6', x: 700, y: 175, label: 'v6' },
 ];
 
 export const INITIAL_EDGES: Edge[] = [

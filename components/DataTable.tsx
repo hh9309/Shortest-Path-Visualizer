@@ -9,7 +9,7 @@ interface DataTableProps {
 const DataTable: React.FC<DataTableProps> = ({ currentStep, nodes }) => {
   if (!currentStep) return (
     <div className="h-full flex items-center justify-center text-slate-400 italic text-sm">
-        点击“开始演示”查看数据
+        点击“开始计算”查看数据
     </div>
   );
 

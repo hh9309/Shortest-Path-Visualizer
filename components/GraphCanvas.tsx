@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from 'react';
 import { Node, Edge, EditorMode, AlgorithmNodeState } from '../types';
 import { COLORS } from '../constants';
@@ -20,6 +19,8 @@ interface GraphCanvasProps {
   } | null;
   showLabels: boolean;
   resetAlgorithm: () => void;
+  selection: { type: 'node' | 'edge', id: string } | null;
+  onSelect: (sel: { type: 'node' | 'edge', id: string } | null) => void;
 }
 
 const GraphCanvas: React.FC<GraphCanvasProps> = ({
@@ -34,7 +35,9 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
   setEndNodeId,
   currentStepState,
   showLabels,
-  resetAlgorithm
+  resetAlgorithm,
+  selection,
+  onSelect
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<{ nodeId: string, startX: number, startY: number } | null>(null);
@@ -50,6 +53,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
     if (nodeId) {
         if (mode === EditorMode.SELECT) {
             setDragState({ nodeId, startX: e.clientX, startY: e.clientY });
+            onSelect({ type: 'node', id: nodeId });
         } else if (mode === EditorMode.ADD_EDGE) {
             e.stopPropagation(); // Stop propagation to prevent immediate cancel
             setEdgeStart(nodeId);
@@ -143,6 +147,8 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
      } else {
          // Clear edge start if clicking background
          setEdgeStart(null);
+         // Clear selection
+         onSelect(null);
      }
   };
 
@@ -161,9 +167,20 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
   };
 
   const getNodeStroke = (nodeId: string) => {
+      const isSelected = selection?.type === 'node' && selection.id === nodeId;
+      if (isSelected) return '#000'; // Black stroke for selection
+
       if (nodeId === startNodeId) return COLORS.success;
       if (nodeId === endNodeId) return COLORS.danger;
       return '#fff';
+  }
+
+  const getNodeStrokeWidth = (nodeId: string) => {
+      const isSelected = selection?.type === 'node' && selection.id === nodeId;
+      const isActive = currentStepState?.activeNodeId === nodeId;
+      if (isSelected) return 3;
+      if (isActive) return 4;
+      return 3;
   }
 
   const getNodeLabelText = (node: Node) => {
@@ -179,17 +196,21 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
   const getEdgeStyle = (edge: Edge) => {
     const isChecking = currentStepState?.checkingEdgeId === edge.id;
+    const isSelected = selection?.type === 'edge' && selection.id === edge.id;
     let isPath = false;
+    
     if (currentStepState) {
         const sState = currentStepState.nodeStates[edge.source];
         const tState = currentStepState.nodeStates[edge.target];
         if (tState?.parent === edge.source && tState.status === 'permanent') isPath = true;
         if (sState?.parent === edge.target && sState.status === 'permanent') isPath = true;
     }
+
     return {
-      stroke: isChecking ? COLORS.warning : (isPath ? COLORS.primary : '#94a3b8'),
-      strokeWidth: isPath ? 4 : (isChecking ? 3 : 2),
-      opacity: (currentStepState && !isPath && !isChecking) ? 0.3 : 1
+      stroke: isSelected ? '#ef4444' : (isChecking ? COLORS.warning : (isPath ? COLORS.primary : '#94a3b8')),
+      strokeWidth: isSelected ? 4 : (isPath ? 4 : (isChecking ? 3 : 2)),
+      opacity: (currentStepState && !isPath && !isChecking) ? 0.3 : 1,
+      dash: isSelected ? "5,5" : ""
     };
   };
 
@@ -197,7 +218,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
     <div className={`w-full h-full bg-slate-50 relative overflow-hidden select-none ${mode === EditorMode.ADD_EDGE ? 'cursor-crosshair' : ''}`}>
         {/* Instruction overlay */}
         <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow text-sm text-slate-600 pointer-events-none z-10 border border-slate-200">
-            {mode === EditorMode.SELECT && "拖动节点移动，右键删除。"}
+            {mode === EditorMode.SELECT && "拖动移动节点，点击选中，使用工具栏删除。"}
             {mode === EditorMode.ADD_NODE && "点击空白处添加节点。"}
             {mode === EditorMode.ADD_EDGE && "按住鼠标左键，从一个节点拖到另一个节点添加边。"}
             {mode === EditorMode.SET_START && "点击节点设为起点 (绿色)。"}
@@ -224,22 +245,23 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
           const style = getEdgeStyle(edge);
           
           return (
-            <g key={edge.id}>
-                {/* Transparent wider stroke for easier clicking (deletion only) */}
+            <g 
+                key={edge.id}
+                onClick={(e) => {
+                    if (mode === EditorMode.SELECT) {
+                        e.stopPropagation();
+                        onSelect({ type: 'edge', id: edge.id });
+                    }
+                }}
+                className={mode === EditorMode.SELECT ? "cursor-pointer" : ""}
+            >
+                {/* Transparent wider stroke for easier clicking */}
                 <line 
                     x1={s.x} y1={s.y} x2={t.x} y2={t.y} 
                     stroke="transparent" 
                     strokeWidth="20"
-                    className="cursor-pointer"
-                    onContextMenu={(e) => {
-                        e.preventDefault(); 
-                        if(confirm("确定删除此边吗?")) {
-                            onEdgesChange(edges.filter(ed => ed.id !== edge.id));
-                            resetAlgorithm();
-                        }
-                    }}
                 >
-                    <title>右键删除</title>
+                    <title>点击选中</title>
                 </line>
                 
                 {/* Visible line */}
@@ -248,6 +270,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
                     stroke={style.stroke} 
                     strokeWidth={style.strokeWidth}
                     opacity={style.opacity}
+                    strokeDasharray={style.dash}
                     className="pointer-events-none transition-all duration-300"
                 />
             </g>
@@ -273,6 +296,7 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
         {nodes.map(node => {
             const isPermanent = currentStepState?.nodeStates[node.id]?.status === 'permanent';
             const isActive = currentStepState?.activeNodeId === node.id;
+            const isSelected = selection?.type === 'node' && selection.id === node.id;
             
             return (
                 <g 
@@ -280,28 +304,25 @@ const GraphCanvas: React.FC<GraphCanvasProps> = ({
                     transform={`translate(${node.x}, ${node.y})`}
                     onMouseDown={(e) => handleMouseDown(e, node.id)}
                     onMouseUp={(e) => handleMouseUp(e, node.id)}
+                    onClick={(e) => e.stopPropagation()} // Stop propagation to prevent background clearing selection
                     onMouseEnter={() => setHoverNode(node.id)}
                     onMouseLeave={() => setHoverNode(null)}
-                    onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (confirm(`确定删除节点 ${node.label} 吗?`)) {
-                            onNodesChange(nodes.filter(n => n.id !== node.id));
-                            onEdgesChange(edges.filter(ed => ed.source !== node.id && ed.target !== node.id));
-                            resetAlgorithm();
-                        }
-                    }}
                     className="cursor-pointer transition-all duration-300"
                     style={{ opacity: (currentStepState && !currentStepState.nodeStates[node.id]) ? 0.5 : 1}}
                 >
-                    {/* Invisible larger hit area for easier connections - fill must be white with 0 opacity to catch events */}
+                    {/* Invisible larger hit area for easier connections */}
                     <circle r="35" fill="white" opacity="0" />
+
+                    {/* Selection halo */}
+                    {isSelected && (
+                         <circle r="28" fill="none" stroke={COLORS.primary} strokeWidth="2" strokeDasharray="4,2" className="animate-spin-slow" />
+                    )}
 
                     <circle 
                         r={isActive ? 24 : 20} 
                         fill={getNodeColor(node.id)}
                         stroke={getNodeStroke(node.id)}
-                        strokeWidth={isActive ? 4 : 3}
+                        strokeWidth={getNodeStrokeWidth(node.id)}
                         className="shadow-md pointer-events-none" // Events handled by group
                     />
                     <text 
