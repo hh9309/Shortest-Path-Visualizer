@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import GraphCanvas from './components/GraphCanvas';
 import DataTable from './components/DataTable';
 import AIInsightsPanel from './components/AIInsightsPanel';
+import StepList from './components/StepList';
 import { runDoubleLabeling } from './services/dijkstra';
 import { INITIAL_NODES, INITIAL_EDGES } from './constants';
 import { Node, Edge, EditorMode, AlgorithmStep } from './types';
@@ -241,7 +242,17 @@ export default function App() {
             {/* --- ALGORITHM TAB --- */}
             <div className={`h-full flex flex-col transition-opacity duration-300 ${activeTab === 'algorithm' ? 'opacity-100' : 'hidden opacity-0 absolute inset-0 pointer-events-none'}`}>
                 
-                {/* Controls Area */}
+                {/* 1. Step List (Collapsible) - Placed Above Controls */}
+                <StepList 
+                    steps={steps} 
+                    currentIndex={currentStepIndex} 
+                    onStepSelect={(idx) => {
+                        setIsPlaying(false);
+                        setCurrentStepIndex(idx);
+                    }}
+                />
+
+                {/* 2. Controls Area */}
                 <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex-shrink-0 space-y-2">
                     {/* Playback Buttons */}
                     <div className="flex items-center gap-2">
@@ -280,7 +291,7 @@ export default function App() {
                     )}
                 </div>
 
-                {/* Data Table Area */}
+                {/* 3. Data Table Area */}
                 <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                     <div className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-400 uppercase border-b border-slate-200 flex items-center gap-2">
                         <TableProperties size={14}/> 标号数据表
