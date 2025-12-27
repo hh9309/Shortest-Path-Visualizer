@@ -65,7 +65,8 @@ const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({ nodes, edges, startNo
     return `你是一位运筹学专家。当前网络图数据：\n${edgesDesc}\n
 目标：分析从 ${startNode} 到 ${endNode} 的最短路径。
 当前算法执行模式：双标号法（P 标号与 T 标号更新逻辑）。
-${selectedModel === 'deepseek' ? '请以 DeepSeek 的深度逻辑思维，详尽拆解每一步标号的变化原因。' : '请以 Gemini 的高效总结能力，给出最核心的决策洞察。'}`;
+${selectedModel === 'deepseek' ? '请以 DeepSeek 的深度逻辑思维，详尽拆解每一步标号的变化原因。' : '请以 Gemini 的高效总结能力，给出最核心的决策洞察。'}
+注意：为了保持清晰，你的回答请务必控制在 300 字以内。`;
   };
 
   const handleSendMessage = async (customMsg?: string) => {
@@ -228,7 +229,7 @@ ${selectedModel === 'deepseek' ? '请以 DeepSeek 的深度逻辑思维，详尽
                 <div className="flex items-center justify-between">
                   <label className="text-[12px] font-black text-slate-700 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-[11px] shadow-lg shadow-slate-200">2</span>
-                    模型选择: 决定算法逻辑
+                    模型选择: 决定算法
                   </label>
                   {!savedKey ? (
                     <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1 italic">
@@ -247,20 +248,20 @@ ${selectedModel === 'deepseek' ? '请以 DeepSeek 的深度逻辑思维，详尽
                       key={m}
                       onClick={() => setSelectedModel(m)}
                       disabled={!savedKey}
-                      className={`relative overflow-hidden p-6 rounded-3xl border-2 font-black text-xs transition-all flex flex-col items-center gap-3 group ${
+                      className={`relative overflow-hidden p-4 rounded-3xl border-2 font-black text-xs transition-all flex flex-col items-center gap-2 group ${
                         selectedModel === m 
                         ? 'bg-blue-600 border-blue-600 text-white shadow-2xl shadow-blue-200 scale-[1.05] z-10' 
                         : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:bg-blue-50/30'
                       } ${!savedKey ? 'cursor-not-allowed grayscale-[0.5]' : 'cursor-pointer'}`}
                     >
-                      <div className={`p-3 rounded-2xl transition-all ${
+                      <div className={`p-2 rounded-xl transition-all ${
                         selectedModel === m ? 'bg-white/20 text-white' : 'bg-slate-50 text-slate-300 group-hover:text-blue-400'
                       }`}>
-                        {m === 'gemini' ? <Cpu size={28}/> : <Bot size={28}/>}
+                        {m === 'gemini' ? <Cpu size={16}/> : <Bot size={16}/>}
                       </div>
                       <div className="flex flex-col items-center">
-                        <span className="text-[13px] tracking-tight">{m === 'gemini' ? 'Gemini 3 Pro' : 'DeepSeek V3'}</span>
-                        <span className={`text-[9px] mt-1 font-bold px-2 py-0.5 rounded-full ${
+                        <span className="text-[11px] tracking-tight">{m === 'gemini' ? 'Gemini 3 Pro' : 'DeepSeek V3'}</span>
+                        <span className={`text-[8px] mt-1 font-bold px-1.5 py-0.5 rounded-full ${
                           selectedModel === m ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
                         }`}>
                           {m === 'gemini' ? '专家分析' : '深度逻辑'}
@@ -268,8 +269,8 @@ ${selectedModel === 'deepseek' ? '请以 DeepSeek 的深度逻辑思维，详尽
                       </div>
                       
                       {selectedModel === m && (
-                        <div className="absolute top-3 right-3 bg-white text-blue-600 rounded-full p-0.5 shadow-lg">
-                          <Check size={14} strokeWidth={4} />
+                        <div className="absolute top-2 right-2 bg-white text-blue-600 rounded-full p-0.5 shadow-lg">
+                          <Check size={10} strokeWidth={4} />
                         </div>
                       )}
                     </button>
@@ -309,7 +310,7 @@ ${selectedModel === 'deepseek' ? '请以 DeepSeek 的深度逻辑思维，详尽
               <p className="text-[13px] text-slate-400 mt-4 mb-10 max-w-[320px] leading-relaxed font-bold">
                 “输入 API-Key ➜ 确认并锁定 ➜ 选择引擎”
                 <br/>
-                <span className="text-blue-500/70">完成配置后，AI 将为您拆解每一轮双标号法的执行细节。</span>
+                <span className="text-blue-500/70">内容将保持在 300 字内。AI 将为您拆解标号法细节。</span>
               </p>
               
               {!isConfigured ? (
