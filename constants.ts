@@ -15,14 +15,14 @@ export const COLORS = {
   end: '#ef4444',
 };
 
-// Initial nodes positioned left-aligned and vertically centered for mobile view (~300-400px height)
+// 坐标优化：再次上移并微调 X 轴分布，使图在视野中更加紧凑且居中
 export const INITIAL_NODES: Node[] = [
-  { id: '1', x: 100, y: 175, label: 'v1' },
-  { id: '2', x: 300, y: 75, label: 'v2' },
-  { id: '3', x: 300, y: 275, label: 'v3' },
-  { id: '4', x: 500, y: 75, label: 'v4' },
-  { id: '5', x: 500, y: 275, label: 'v5' },
-  { id: '6', x: 700, y: 175, label: 'v6' },
+  { id: '1', x: 220, y: 150, label: 'v1' },
+  { id: '2', x: 420, y: 50, label: 'v2' },
+  { id: '3', x: 420, y: 250, label: 'v3' },
+  { id: '4', x: 620, y: 50, label: 'v4' },
+  { id: '5', x: 620, y: 250, label: 'v5' },
+  { id: '6', x: 820, y: 150, label: 'v6' },
 ];
 
 export const INITIAL_EDGES: Edge[] = [

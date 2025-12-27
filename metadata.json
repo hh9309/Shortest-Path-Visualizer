@@ -1,5 +1,5 @@
 {
-  "name": "最短路双标号法演示 (Shortest Path Visualizer)",
+  "name": "最短路问题AI可视化 (Shortest Path Visualizer)",
   "description": "交互式运筹学教学工具，演示最短路径问题的双标号法（Dijkstra算法变体）。支持自定义图结构、步进演示及详细的数据表追踪。",
   "requestFramePermissions": []
 }
