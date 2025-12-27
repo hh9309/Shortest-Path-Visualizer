@@ -15,14 +15,14 @@ export const COLORS = {
   end: '#ef4444',
 };
 
-// 坐标优化：再次上移并微调 X 轴分布，使图在视野中更加紧凑且居中
+// 坐标优化：将 y 坐标整体增加 75 像素（约 2 厘米），使图结构在视觉上更加居中下移
 export const INITIAL_NODES: Node[] = [
-  { id: '1', x: 220, y: 150, label: 'v1' },
-  { id: '2', x: 420, y: 50, label: 'v2' },
-  { id: '3', x: 420, y: 250, label: 'v3' },
-  { id: '4', x: 620, y: 50, label: 'v4' },
-  { id: '5', x: 620, y: 250, label: 'v5' },
-  { id: '6', x: 820, y: 150, label: 'v6' },
+  { id: '1', x: 220, y: 225, label: 'v1' },
+  { id: '2', x: 420, y: 125, label: 'v2' },
+  { id: '3', x: 420, y: 325, label: 'v3' },
+  { id: '4', x: 620, y: 125, label: 'v4' },
+  { id: '5', x: 620, y: 325, label: 'v5' },
+  { id: '6', x: 820, y: 225, label: 'v6' },
 ];
 
 export const INITIAL_EDGES: Edge[] = [
