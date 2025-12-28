@@ -1,7 +1,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Node, Edge } from '../types';
-import { Brain, Send, Loader2, User, Bot, Trash2, Sparkles, Settings, X, Check, ShieldCheck, Zap, Cpu, Key, Eye, EyeOff, Lock, Unlock } from 'lucide-react';
+import { 
+  Brain, Send, Loader2, User, Bot, Trash2, Sparkles, 
+  Settings, X, Check, ShieldCheck, Zap, Cpu, Key, 
+  Eye, EyeOff, Lock, Unlock, ChevronRight, Info
+} from 'lucide-react';
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 
 interface AIInsightsPanelProps {
@@ -25,10 +29,10 @@ const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({ nodes, edges, startNo
   const [error, setError] = useState<string>('');
   const [showSettings, setShowSettings] = useState(false);
   
-  // 核心配置状态
-  const [userApiKey, setUserApiKey] = useState<string>('');
+  // 核心配置状态 - 尝试从 SessionStorage 恢复
+  const [userApiKey, setUserApiKey] = useState<string>(() => sessionStorage.getItem('path_ai_key') || '');
   const [showKey, setShowKey] = useState(false);
-  const [isKeyValid, setIsKeyValid] = useState(false);
+  const [isKeyValid, setIsKeyValid] = useState(() => !!sessionStorage.getItem('path_ai_key'));
   const [selectedModel, setSelectedModel] = useState<ModelType>('gemini');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -37,35 +41,39 @@ const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({ nodes, edges, startNo
 
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: 'smooth' });
+      chatContainerRef.current.scrollTo({ 
+        top: chatContainerRef.current.scrollHeight, 
+        behavior: 'smooth' 
+      });
     }
   };
 
   useEffect(() => { 
-    // 内容变化或加载状态变化时滚动到底部
     const timer = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timer);
   }, [messages, loading]);
 
-  // 当模型或 Key 改变时，重置对话上下文
+  // 当配置变更时重置聊天上下文以应用新设置
   useEffect(() => {
     setGeminiChat(null);
   }, [selectedModel, userApiKey]);
 
   /**
-   * 清洗 API Key，防止 Header 编码错误 (non ISO-8859-1 code point)
+   * 增强型 API Key 清洗逻辑
+   * 彻底剔除所有非 ASCII 字符、控制字符及首尾空格，解决 Headers 编码冲突
    */
   const getCleanKey = (key: string) => {
-    return key.replace(/[^\x00-\x7F]/g, "").trim();
+    return key.replace(/[\u007F-\uFFFF]/g, "").replace(/[\s\t\n\r]/g, "").trim();
   };
 
   const handleApplyConfig = () => {
     const cleanKey = getCleanKey(userApiKey);
     if (!cleanKey || cleanKey.length < 10) {
-      setError('请输入有效的 API-Key');
+      setError('请输入有效的 API-Key (通常以 AIza 开头)');
       setIsKeyValid(false);
       return;
     }
+    sessionStorage.setItem('path_ai_key', cleanKey);
     setError('');
     setIsKeyValid(true);
     setShowSettings(false);
@@ -80,17 +88,26 @@ const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({ nodes, edges, startNo
       return `${s} -> ${t} (权重: ${e.weight})`;
     }).join('\n');
 
-    return `你是一位运筹学专家。当前网络图数据：\n${edgesDesc}\n
-目标：分析从 ${startNode} 到 ${endNode} 的最短路径。
-当前算法执行模式：双标号法（P 标号与 T 标号更新逻辑）。
-${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一步标号的变化原因。' : '请以高效总结能力，给出最核心的决策洞察。'}
-注意：你的回答内容必须高度精炼，字数严格限制在 300 字以内。`;
+    return `你是一位资深运筹学导师，专注于图论与最短路径算法。
+当前图结构如下：
+${edgesDesc}
+
+你的任务：使用“双标号法”（Dijkstra算法变体，包含P永久标号与T临时标号）分析从节点 ${startNode} 到 ${endNode} 的路径。
+
+分析指南：
+1. 识别当前拓扑中的关键路径与瓶颈。
+2. 解释标号的更新逻辑（如何从 T 标号转为 P 标号）。
+3. ${selectedModel === 'deepseek' ? '风格：深度数学推导，严谨且详尽。' : '风格：策略洞察，侧重于全局优化建议。'}
+4. 约束：回答必须高度专业且精炼，严禁超过 300 字。`;
   };
 
   const handleSendMessage = async (customMsg?: string) => {
-    if (!isKeyValid) {
+    // 自动回退：如果用户没输 Key，尝试使用环境内置 Key (如果有)
+    const activeKey = getCleanKey(userApiKey) || (process.env.API_KEY ? getCleanKey(process.env.API_KEY) : '');
+    
+    if (!activeKey) {
       setShowSettings(true);
-      setError('请先在配置中录入 API-Key 并确认');
+      setError('未检测到有效的 API Key，请先配置。');
       return;
     }
 
@@ -104,28 +121,47 @@ ${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一�
     if (!customMsg) setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
 
     try {
-      const apiKey = getCleanKey(userApiKey);
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: activeKey });
       
-      let currentChat = geminiChat;
+      // 模型映射
       const modelName = selectedModel === 'gemini' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+      
+      // 如果是 Pro 模型，启用 Thinking 增强逻辑分析能力
+      const config = {
+        systemInstruction: getSystemPrompt(),
+        ...(modelName.includes('pro') ? { thinkingConfig: { thinkingBudget: 2000 } } : {})
+      };
 
+      let currentChat = geminiChat;
       if (!currentChat) {
         currentChat = ai.chats.create({
           model: modelName,
-          config: { 
-            systemInstruction: getSystemPrompt(),
-          },
+          config: config,
         });
         setGeminiChat(currentChat);
       }
 
       const response: GenerateContentResponse = await currentChat.sendMessage({ message: userMsg });
-      setMessages(prev => [...prev, { role: 'model', content: response.text || 'AI 响应为空' }]);
+      const text = response.text;
+      
+      if (!text) throw new Error("AI 返回了空响应，可能是由于安全过滤或配额限制。");
+      
+      setMessages(prev => [...prev, { role: 'model', content: text }]);
+      setIsKeyValid(true); // 成功响应，确认 Key 有效
     } catch (err: any) {
-      console.error("AI Error:", err);
-      setError('AI 响应异常。请确认 Key 的有效性及网络连接。');
-      if (err.message?.includes('key not valid')) setIsKeyValid(false);
+      console.error("AI SDK Error:", err);
+      const errorMsg = err.message || '';
+      
+      if (errorMsg.includes('API key not valid')) {
+        setError('API Key 无效，请重新输入。');
+        setIsKeyValid(false);
+      } else if (errorMsg.includes('quota')) {
+        setError('API 配额已耗尽或请求过快。');
+      } else if (errorMsg.includes('fetch')) {
+        setError('网络请求失败，请检查网络连接或代理设置。');
+      } else {
+        setError(`AI 响应异常: ${errorMsg.slice(0, 50)}...`);
+      }
     } finally {
       setLoading(false);
     }
@@ -133,24 +169,21 @@ ${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一�
 
   return (
     <div className="flex flex-col h-full bg-white relative overflow-hidden font-sans border-t border-slate-200">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-100 px-5 py-3 flex items-center justify-between shadow-sm z-30 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-100">
-            <Brain size={16} />
+      {/* 顶部状态栏 */}
+      <div className="bg-white/90 backdrop-blur-md border-b border-slate-100 px-5 py-3 flex items-center justify-between shadow-sm z-30 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-100 ring-2 ring-white">
+            <Brain size={18} />
           </div>
           <div>
-            <h2 className="text-xs font-black text-slate-800 tracking-tight">AI 决策引擎</h2>
+            <h2 className="text-[11px] font-black text-slate-800 tracking-tight flex items-center gap-2">
+              AI 决策引擎
+              <span className={`w-1.5 h-1.5 rounded-full ${isKeyValid ? 'bg-emerald-500' : 'bg-slate-300'} animate-pulse`}></span>
+            </h2>
             <div className="flex items-center gap-1.5">
-              {isKeyValid ? (
-                <span className="text-[9px] text-emerald-600 font-black uppercase flex items-center gap-1">
-                  <ShieldCheck size={8}/> 引擎就绪
-                </span>
-              ) : (
-                <span className="text-[9px] text-slate-400 font-black uppercase flex items-center gap-1">
-                  <Lock size={8}/> 待录入 Key
-                </span>
-              )}
+              <span className={`text-[9px] font-bold uppercase tracking-wider ${isKeyValid ? 'text-emerald-600' : 'text-slate-400'}`}>
+                {isKeyValid ? '内核已加载' : '等待安全配置'}
+              </span>
             </div>
           </div>
         </div>
@@ -159,42 +192,53 @@ ${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一�
           {messages.length > 0 && (
             <button 
               onClick={() => { setMessages([]); setGeminiChat(null); }} 
-              className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition-all"
-              title="清空聊天记录"
+              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
             >
               <Trash2 size={14} />
             </button>
           )}
           <button 
             onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-lg transition-all border ${showSettings ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+            className={`p-1.5 rounded-lg transition-all border ${
+              showSettings 
+              ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
+              : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+            }`}
           >
-            <Settings size={14} />
+            <Settings size={16} />
           </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden relative bg-slate-50/20">
-        {/* Settings Overlay - 添加 overflow-y-auto 解决不可见问题 */}
+        {/* 设置面板 */}
         {showSettings && (
-          <div className="absolute inset-0 bg-white/98 backdrop-blur-xl z-40 p-5 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300">
-            <div className="flex items-center justify-between mb-5 max-w-sm mx-auto w-full flex-shrink-0">
-              <div>
-                <h3 className="text-sm font-black text-slate-900">引擎配置</h3>
-                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-0.5">Engine Setup</p>
+          <div className="absolute inset-0 bg-white/98 backdrop-blur-2xl z-40 p-6 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300">
+            <div className="flex items-center justify-between mb-8 max-w-sm mx-auto w-full">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Settings size={18}/></div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">智能洞察配置</h3>
+                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em]">Engine Parameters</p>
+                </div>
               </div>
-              <button onClick={() => setShowSettings(false)} className="p-1 text-slate-300 hover:text-slate-900 bg-slate-50 rounded-full transition-all">
+              <button 
+                onClick={() => setShowSettings(false)} 
+                className="p-1.5 text-slate-300 hover:text-slate-900 transition-all"
+              >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="space-y-5 max-w-sm mx-auto w-full pb-6">
-              {/* API Key Input */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                  <Key size={10} /> 录入 API-Key
+            <div className="space-y-6 max-w-sm mx-auto w-full pb-8">
+              {/* API Key 录入 */}
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                  <span>API-Key 安全授权</span>
+                  {isKeyValid && <span className="text-emerald-500 text-[8px] flex items-center gap-1"><Check size={10}/> Verified</span>}
                 </label>
-                <div className="relative">
+                <div className="relative group">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Key size={14}/></div>
                   <input 
                     type={showKey ? "text" : "password"}
                     value={userApiKey}
@@ -202,78 +246,73 @@ ${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一�
                       setUserApiKey(e.target.value);
                       setIsKeyValid(false);
                     }}
-                    placeholder="在此粘贴您的 API Key..."
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all shadow-inner"
+                    placeholder="粘贴 AIza... 格式的密钥"
+                    className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 bg-white text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
                   />
                   <button 
                     onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-indigo-500"
                   >
                     {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
               </div>
 
-              {/* Model Select */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                  <Cpu size={10} /> 模型选择 (图标已缩放)
-                </label>
+              {/* 模型切换 */}
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">选择逻辑内核</label>
                 <div className="grid grid-cols-2 gap-3">
                   {(['gemini', 'deepseek'] as const).map(m => (
                     <button
                       key={m}
                       onClick={() => setSelectedModel(m)}
-                      className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center gap-1 group ${
+                      className={`relative p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1.5 ${
                         selectedModel === m 
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg' 
-                        : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300'
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' 
+                        : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200'
                       }`}
                     >
                       <div className={`p-1 rounded-md ${selectedModel === m ? 'bg-white/20' : 'bg-slate-50'}`}>
-                        {m === 'gemini' ? <Cpu size={10}/> : <Bot size={10}/>}
+                        {m === 'gemini' ? <Cpu size={12}/> : <Bot size={12}/>}
                       </div>
-                      <span className="text-[9px] font-black uppercase tracking-tight">{m === 'gemini' ? 'Gemini 3' : 'DeepSeek'}</span>
-                      {selectedModel === m && (
-                        <div className="absolute top-1 right-1 bg-white text-blue-600 rounded-full p-0.5 shadow-sm">
-                          <Check size={6} strokeWidth={6} />
-                        </div>
-                      )}
+                      <span className="text-[9px] font-black uppercase tracking-tight">{m === 'gemini' ? 'Gemini 3 Pro' : 'Fast Insight'}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex-shrink-0">
+              <div className="pt-6 border-t border-slate-100">
                 <button
                   onClick={handleApplyConfig}
-                  className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[11px] shadow-lg hover:bg-slate-800 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-black text-[11px] shadow-xl hover:bg-indigo-900 transition-all flex items-center justify-center gap-2 group"
                 >
-                  <Check size={14} /> 确认并开始推演
+                  <ShieldCheck size={16} className="text-indigo-400" />
+                  保存并同步配置
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Chat History - 核心内容区域，自带滚动条 */}
+        {/* 聊天内容区 */}
         <div ref={chatContainerRef} className="h-full overflow-y-auto p-4 space-y-4 custom-scrollbar">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 min-h-[250px]">
-              <div className="relative mb-4">
-                <div className={`w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-xl border border-blue-50 transition-all ${isKeyValid ? 'text-blue-600' : 'text-slate-300'}`}>
-                  {isKeyValid ? <Sparkles size={28} className="fill-blue-600 animate-pulse" /> : <Lock size={28} />}
+              <div className="relative mb-6">
+                <div className="absolute inset-0 bg-indigo-500 rounded-full blur-3xl opacity-10 animate-pulse"></div>
+                <div className={`relative w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-xl border border-indigo-50 transition-all ${isKeyValid ? 'text-indigo-600' : 'text-slate-300'}`}>
+                  {isKeyValid ? <Sparkles size={32} className="fill-indigo-600" /> : <Lock size={32} />}
                 </div>
               </div>
-              <h3 className="text-sm font-black text-slate-900 tracking-tight">AI 算法辅助报告</h3>
-              <p className="text-[10px] text-slate-400 mt-2 mb-6 max-w-[220px] leading-relaxed font-bold">
-                {isKeyValid ? '一切就绪！点击下方按钮，获取 300 字以内的最短路径执行策略报告。' : '当前尚未配置 API 密钥，请点击右上角设置图标开始。'}
+              <h3 className="text-sm font-black text-slate-900">算法智能洞察</h3>
+              <p className="text-[10px] text-slate-400 mt-2 mb-8 max-w-[200px] leading-relaxed font-bold">
+                {isKeyValid ? '就绪！点击下方按钮，基于当前 P/T 标号生成深度分析。' : '请先点击右上角设置图标录入密钥。'}
               </p>
               
               <button 
-                onClick={() => handleSendMessage("请分析当前图的最短路径问题并给出执行策略。")}
+                onClick={() => handleSendMessage("基于当前网络拓扑和双标号状态，请分析最短路径趋势。")}
                 disabled={loading || !isKeyValid}
-                className="px-8 py-3 bg-blue-600 text-white text-[11px] font-black rounded-xl shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-20 disabled:grayscale"
+                className="px-8 py-3 bg-indigo-600 text-white text-[11px] font-black rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-20 disabled:grayscale"
               >
                 {loading ? <Loader2 size={14} className="animate-spin"/> : <Zap size={14} className="text-amber-300 fill-amber-300"/>}
                 生成 300 字洞察报告
@@ -283,24 +322,24 @@ ${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一�
             <div className="space-y-6 max-w-3xl mx-auto pb-4">
               {messages.map((msg, idx) => (
                 <div key={idx} className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border shadow-sm transition-all ${msg.role === 'user' ? 'bg-white text-slate-600 border-slate-100' : 'bg-slate-900 text-white border-slate-800'}`}>
-                    {msg.role === 'user' ? <User size={14}/> : <Bot size={14}/>}
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border shadow-sm transition-all ${msg.role === 'user' ? 'bg-white text-slate-400' : 'bg-slate-900 text-white border-slate-800'}`}>
+                    {msg.role === 'user' ? <User size={16}/> : <Bot size={16}/>}
                   </div>
-                  <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-[12px] font-medium leading-relaxed shadow-sm whitespace-pre-wrap transition-all ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-[12px] font-medium leading-relaxed shadow-sm whitespace-pre-wrap transition-all ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'}`}>
                     {msg.content}
                   </div>
                 </div>
               ))}
               {loading && (
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shadow-sm"><Bot size={14}/></div>
+                  <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shadow-sm"><Bot size={16}/></div>
                   <div className="bg-white border border-slate-100 px-5 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
                     <div className="flex gap-1">
-                      <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce"></div>
-                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                      <div className="w-1.5 h-1.5 bg-blue-200 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                      <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce"></div>
+                      <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                      <div className="w-1.5 h-1.5 bg-indigo-200 rounded-full animate-bounce [animation-delay:0.4s]"></div>
                     </div>
-                    <span className="text-[9px] text-slate-400 font-black tracking-widest uppercase">模型思考中...</span>
+                    <span className="text-[9px] text-slate-400 font-black tracking-widest uppercase">逻辑推演中...</span>
                   </div>
                 </div>
               )}
@@ -310,14 +349,15 @@ ${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一�
         </div>
       </div>
 
-      {/* Error Message Display - 自动浮现 */}
+      {/* 错误浮窗 */}
       {error && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded-full text-[10px] font-black shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-red-600 text-white px-4 py-2.5 rounded-xl text-[10px] font-black shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 flex items-center gap-2">
+          <Info size={14} />
           {error}
         </div>
       )}
 
-      {/* Input Bar - 底部输入栏 */}
+      {/* 底部输入栏 */}
       {messages.length > 0 && !showSettings && (
         <div className="p-3 bg-white border-t border-slate-100 shadow-sm z-20 flex-shrink-0">
           <div className="flex items-center gap-2 max-w-4xl mx-auto">
@@ -326,14 +366,14 @@ ${selectedModel === 'deepseek' ? '请以深度逻辑思维，详尽拆解每一�
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="继续询问最短路算法细节..."
-              className="flex-1 px-5 py-2.5 rounded-full border border-slate-100 bg-slate-50 text-[12px] font-bold focus:bg-white focus:border-blue-500 transition-all outline-none"
+              placeholder="询问特定标号逻辑或算法瓶颈..."
+              className="flex-1 px-5 py-2.5 rounded-full border border-slate-100 bg-slate-50 text-[12px] font-bold focus:bg-white focus:border-indigo-500 transition-all outline-none"
               disabled={loading || !isKeyValid}
             />
             <button 
               onClick={() => handleSendMessage()} 
               disabled={loading || !input.trim() || !isKeyValid} 
-              className="p-2.5 bg-slate-900 text-white rounded-full shadow-lg hover:bg-slate-800 active:scale-90 disabled:opacity-20 transition-all flex-shrink-0"
+              className="p-2.5 bg-slate-900 text-white rounded-full shadow-lg hover:bg-indigo-600 active:scale-90 disabled:opacity-20 transition-all flex-shrink-0"
             >
               <Send size={18} strokeWidth={2.5} />
             </button>
